@@ -14,6 +14,8 @@ app.use(bodyParser.json()); // for parsing application/json
 let logs = [];
 let logFileName = 'logs1.txt';
 
+
+
 // Create a connection pool to the MySQL database.
 const pool = mysql.createPool({
   connectionLimit : 10,
