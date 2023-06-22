@@ -13,17 +13,21 @@ app.use(bodyParser.json()); // for parsing application/json
 
 let logs = [];
 let logFileName = 'logs1.txt';
+if (!fs.existsSync(logFileName)){
+    fs.writeFileSync(logFileName, ''); // Create the file
+}
 
 
 
 // Create a connection pool to the MySQL database.
 const pool = mysql.createPool({
-  connectionLimit : 10,
-  host     : 'localhost', // replace with your host name
-  user     : 'root',      // replace with your mysql username
-  password : 'password',  // replace with your mysql password
-  database : 'logs'       // replace with your database name
-});
+    connectionLimit : 10,
+    host     : process.env.DB_HOST, // use environment variable here
+    user     : 'root',      // replace with your mysql username
+    password : 'password',  // replace with your mysql password
+    database : 'logs'       // replace with your database name
+  });
+  
 
 app.post('/log', (req, res) => {
     const logData = req.body;
