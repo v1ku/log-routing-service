@@ -20,13 +20,26 @@ app.post('/log', (req, res) => {
     });
 });
 
-setInterval(() => {
+let writeTimer;
+
+const writeToFile = () => {
     if(logs.length){
-        const dataToWrite = logs.join('\n');
+        const dataToWrite = JSON.stringify(logs) + '\n';
         logs = [];
         fs.appendFileSync('logs.txt', dataToWrite);
     }
-}, 30000); // runs every 30 seconds
+    
+    const stats = fs.statSync('logs.txt');
+    const fileSizeInBytes = stats["size"];
+    
+    // Restart timer if file size is less than 10MB
+    if (fileSizeInBytes < 10 * 1024 * 1024) {
+        writeTimer = setTimeout(writeToFile, 30000);
+    }
+}
+
+// Start the write timer immediately
+writeTimer = setTimeout(writeToFile, 30000);
 
 const PORT = process.env.PORT || 3000;
 
