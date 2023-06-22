@@ -31,12 +31,7 @@ app.post('/log', (req, res) => {
     
     // If adding this log will exceed 10MB, write existing logs to current file and start a new one
     if(fileSizeInBytes + size > 10 * 1024 * 1024) {
-        if(logs.length){
-            writeLogsToDb(logs);
-            const dataToWrite = JSON.stringify(logs);
-            fs.appendFileSync(logFileName, dataToWrite);
-            logs = [];
-        }
+        writeToFile();  // force write logs to DB and file
         // Start a new file
         const match = logFileName.match(/(\d+)/);
         logFileName = 'logs' + (parseInt(match ? match[0] : "0") + 1) + '.txt';
@@ -50,13 +45,55 @@ app.post('/log', (req, res) => {
 });
 
 let writeTimer;
+let transactionInProgress = false;
 
-const writeToFile = () => {
-    if(logs.length){
-        writeLogsToDb(logs);
-        const dataToWrite = JSON.stringify(logs);
-        fs.appendFileSync(logFileName, dataToWrite);
-        logs = [];
+const writeToFile = async () => {
+    if(logs.length && !transactionInProgress) {
+        transactionInProgress = true;
+
+        pool.getConnection((err, connection) => {
+            if(err) {
+                console.error("Error getting DB connection:", err);
+                transactionInProgress = false;
+                return;
+            }
+
+            connection.beginTransaction(err => {
+                if (err) {
+                    console.error("Error beginning transaction:", err);
+                    connection.release();
+                    transactionInProgress = false;
+                    return;
+                }
+                
+                writeLogsToDb(connection, logs, (err, results) => {
+                    if (err) {
+                        return connection.rollback(() => {
+                            console.error("Error inserting logs, rolling back:", err);
+                            connection.release();
+                            transactionInProgress = false;
+                        });
+                    }
+
+                    const dataToWrite = JSON.stringify(logs);
+                    fs.appendFileSync(logFileName, dataToWrite);
+                    fs.unlinkSync(logFileName);  // delete file after writing to DB
+                    logs = [];
+
+                    connection.commit(err => {
+                        if (err) {
+                            return connection.rollback(() => {
+                                console.error("Error committing transaction, rolling back:", err);
+                            });
+                        }
+                        console.log("Transaction complete");
+                    });
+                    
+                    connection.release();
+                    transactionInProgress = false;
+                });
+            });
+        });
     }
     
     const stats = fs.statSync(logFileName);
@@ -69,13 +106,9 @@ const writeToFile = () => {
 }
 
 // Function to write a batch of logs to the database
-const writeLogsToDb = (logs) => {
+const writeLogsToDb = (connection, logs, callback) => {
     let values = logs.map(log => [log.id, log.unix_ts, log.user_id, log.event_name]);
-
-    pool.query('INSERT INTO log (id, unix_ts, user_id, event_name) VALUES ?', [values], (error, results, fields) => {
-        if (error) throw error;
-        console.log(`Inserted ${results.affectedRows} rows`);
-    });
+    connection.query('INSERT INTO log (id, unix_ts, user_id, event_name) VALUES ?', [values], callback);
 }
 
 // Start the write timer immediately
