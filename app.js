@@ -17,8 +17,6 @@ if (!fs.existsSync(logFileName)){
     fs.writeFileSync(logFileName, ''); // Create the file
 }
 
-
-
 // Create a connection pool to the MySQL database.
 const pool = mysql.createPool({
     connectionLimit : 10,
@@ -26,8 +24,7 @@ const pool = mysql.createPool({
     user     : 'root',      // replace with your mysql username
     password : 'password',  // replace with your mysql password
     database : 'logs'       // replace with your database name
-  });
-  
+});
 
 app.post('/log', (req, res) => {
     const logData = req.body;
@@ -36,7 +33,7 @@ app.post('/log', (req, res) => {
     if(fs.existsSync(logFileName)){
         const stats = fs.statSync(logFileName);
         const fileSizeInBytes = stats["size"];
-        
+
         // If adding this log will exceed 10MB, write existing logs to current file and start a new one
         if(fileSizeInBytes + size > 10 * 1024 * 1024) {
             if(logs.length){
@@ -52,6 +49,8 @@ app.post('/log', (req, res) => {
                 const match = logFileName.match(/(\d+)/);
                 logFileName = 'logs' + (parseInt(match ? match[0] : "0") + 1) + '.txt';
             }
+            // Create the new file immediately after setting its name
+            fs.writeFileSync(logFileName, '');
         }
     }
     logs.push(logData);
@@ -98,7 +97,9 @@ const writeToFile = async () => {
                             });
                         }
                         console.log("Transaction complete");
-                        if(fs.existsSync(logFileName)){
+
+                        // Only unlink the file if the commit was successful
+                        if (!err && fs.existsSync(logFileName)){
                             fs.unlinkSync(logFileName);
                         }
                     });

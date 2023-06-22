@@ -1,0 +1,12 @@
+version: '3.7'
+services:
+  test-script:
+    build: ./scripts
+    depends_on:
+      - app
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    external: true
