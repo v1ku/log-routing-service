@@ -2,6 +2,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const morgan = require('morgan');
 const fs = require('fs');
+const path = require('path');
 const mysql = require('mysql');
 
 const app = express();
@@ -26,17 +27,27 @@ app.post('/log', (req, res) => {
     const logData = req.body;
     const size = Buffer.byteLength(JSON.stringify(logData), 'utf8') + 1; // +1 for newline
 
-    const stats = fs.statSync(logFileName);
-    const fileSizeInBytes = stats["size"];
-    
-    // If adding this log will exceed 10MB, write existing logs to current file and start a new one
-    if(fileSizeInBytes + size > 10 * 1024 * 1024) {
-        writeToFile();  // force write logs to DB and file
-        // Start a new file
-        const match = logFileName.match(/(\d+)/);
-        logFileName = 'logs' + (parseInt(match ? match[0] : "0") + 1) + '.txt';
+    if(fs.existsSync(logFileName)){
+        const stats = fs.statSync(logFileName);
+        const fileSizeInBytes = stats["size"];
+        
+        // If adding this log will exceed 10MB, write existing logs to current file and start a new one
+        if(fileSizeInBytes + size > 10 * 1024 * 1024) {
+            if(logs.length){
+                writeLogsToDb(logs);
+                const dataToWrite = JSON.stringify(logs);
+                fs.appendFileSync(logFileName, dataToWrite);
+                logs = [];
+            }
+            // Start a new file
+            const match = logFileName.match(/(\d+)/);
+            logFileName = 'logs' + (parseInt(match ? match[0] : "0") + 1) + '.txt';
+            while(fs.existsSync(logFileName)){
+                const match = logFileName.match(/(\d+)/);
+                logFileName = 'logs' + (parseInt(match ? match[0] : "0") + 1) + '.txt';
+            }
+        }
     }
-
     logs.push(logData);
     res.status(200).json({
         status: 'success',
@@ -44,20 +55,18 @@ app.post('/log', (req, res) => {
     });
 });
 
-let writeTimer;
 let transactionInProgress = false;
+let writeTimer;
 
 const writeToFile = async () => {
-    if(logs.length && !transactionInProgress) {
+    if (logs.length && !transactionInProgress) {
         transactionInProgress = true;
-
         pool.getConnection((err, connection) => {
             if(err) {
                 console.error("Error getting DB connection:", err);
                 transactionInProgress = false;
                 return;
             }
-
             connection.beginTransaction(err => {
                 if (err) {
                     console.error("Error beginning transaction:", err);
@@ -65,7 +74,6 @@ const writeToFile = async () => {
                     transactionInProgress = false;
                     return;
                 }
-                
                 writeLogsToDb(connection, logs, (err, results) => {
                     if (err) {
                         return connection.rollback(() => {
@@ -74,12 +82,9 @@ const writeToFile = async () => {
                             transactionInProgress = false;
                         });
                     }
-
                     const dataToWrite = JSON.stringify(logs);
                     fs.appendFileSync(logFileName, dataToWrite);
-                    fs.unlinkSync(logFileName);  // delete file after writing to DB
                     logs = [];
-
                     connection.commit(err => {
                         if (err) {
                             return connection.rollback(() => {
@@ -87,8 +92,10 @@ const writeToFile = async () => {
                             });
                         }
                         console.log("Transaction complete");
+                        if(fs.existsSync(logFileName)){
+                            fs.unlinkSync(logFileName);
+                        }
                     });
-                    
                     connection.release();
                     transactionInProgress = false;
                 });
