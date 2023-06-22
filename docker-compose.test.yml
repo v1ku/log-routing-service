@@ -1,12 +1,13 @@
 version: '3.7'
 services:
-  test-script:
-    build: ./scripts
-    depends_on:
-      - app
+  test:
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile
     networks:
-      - app-network
+      app-network:
 
 networks:
   app-network:
-    external: true
+    external:
+      name: log-routing-service_app-network

@@ -9,7 +9,7 @@ const sendLogRequest = async () => {
     };
 
     try {
-        const res = await axios.post('http://app:3000/log', logData);
+        const res = await axios.post('http://172.28.0.3:3000/log', logData);
         console.log(`Status: ${res.status}`);
         console.log('Body: ', res.data);
     } catch (err) {
