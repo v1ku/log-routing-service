@@ -7,10 +7,9 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: password
       MYSQL_DATABASE: logs
-      MYSQL_USER: user
-      MYSQL_PASSWORD: password
     volumes:
       - db-data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-network
   
@@ -20,8 +19,6 @@ services:
       - db
     environment:
       - DB_HOST=db
-      - DB_USER=user
-      - DB_PASSWORD=password
     networks:
       - app-network
     ports:
